@@ -1,0 +1,50 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Build Game Server",
+        "type": "shell",
+        "command": "${workspaceFolder}\\build.bat",
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        },
+        "problemMatcher": ["$gcc"],
+        "presentation": {
+          "reveal": "always",
+          "panel": "new"
+        }
+      },
+      {
+        "label": "Run Game Server",
+        "type": "shell",
+        "command": "${workspaceFolder}\\run.bat",
+        "group": "test",
+        "dependsOn": "Build Game Server",
+        "problemMatcher": [],
+        "presentation": {
+          "reveal": "always",
+          "panel": "new"
+        }
+      },
+      {
+        "label": "C++ Build Single File (g++)",
+        "type": "shell",
+        "command": "D:\\MinGW\\bin\\g++.exe",
+        "args": [
+          "-g",
+          "-std=c++20",
+          "${file}",
+          "-o",
+          "${fileDirname}\\${fileBasenameNoExtension}.exe"
+        ],
+        "group": "build",
+        "problemMatcher": ["$gcc"],
+        "options": {
+          "env": {
+            "PATH": "${env:PATH};D:\\MinGW\\bin"
+          }
+        }
+      }
+    ]
+  }
