@@ -1,112 +1,112 @@
 # Real-Time Game Server + ECS (FPS-lite Arena)
 
-C++17 ile geliştirilmiş, ECS (Entity Component System) mimarisine sahip, yetkili (authoritative) gerçek zamanlı oyun sunucusu. FPS tarzı veya arena tipi oyunlar için temel altyapı sağlar.
+A real-time authoritative game server built with C++17, featuring an ECS (Entity Component System) architecture. Provides a foundation for FPS-style or arena-type games.
 
 ![Server and Client Connection](images/server-client-connection.png)
 
-*Sunucu ve test istemcisi bağlantı örneği*
+*Example of server and test client connection*
 
-## 🎮 Özellikler
+## 🎮 Features
 
-- ✅ **ECS (Entity-Component-System)** mimarisi - Esnek ve ölçeklenebilir oyun mantığı
-- ✅ **Network katmanı** - UDP socket abstraction (Windows/Linux)
-- ✅ **Oda tabanlı** (room-based) sunucu - Çoklu oyun odası desteği
-- ✅ **60/120 tick** server loop - Yüksek performanslı gerçek zamanlı simülasyon
-- ✅ **Physics** katmanı - BVH spatial partitioning ile collision detection
-- ✅ **Matchmaker** - Rating-based oyun eşleştirme sistemi
-- ✅ **Anti-cheat-lite** - Temel hile önleme kontrolleri
-- ✅ **Snapshot** yönetimi - Delta compression için hazır altyapı
-- ✅ **Test Client** - Sunucu bağlantısını test etmek için basit istemci
+- ✅ **ECS (Entity-Component-System)** architecture - Flexible and scalable game logic
+- ✅ **Network layer** - UDP socket abstraction (Windows/Linux)
+- ✅ **Room-based** server - Multiple game room support
+- ✅ **60/120 tick** server loop - High-performance real-time simulation
+- ✅ **Physics** layer - BVH spatial partitioning with collision detection
+- ✅ **Matchmaker** - Rating-based game matching system
+- ✅ **Anti-cheat-lite** - Basic cheat prevention controls
+- ✅ **Snapshot** management - Infrastructure ready for delta compression
+- ✅ **Test Client** - Simple client for testing server connections
 - ⏳ Lag compensation (TODO)
 - ⏳ Rollback/rewind (TODO)
-- ⏳ Deterministik simülasyon (TODO)
+- ⏳ Deterministic simulation (TODO)
 
-## 📁 Proje Yapısı
+## 📁 Project Structure
 
 ```
 Real-Time Game Server + ECS (FPS-lite  Arena)/
 ├── include/
 │   └── common/
-│       └── types.hpp          # Temel type tanımları
+│       └── types.hpp          # Basic type definitions
 ├── ecs/
-│   ├── Entity.hpp             # Entity sınıfı
-│   ├── Component.hpp/cpp      # Component base ve registry
+│   ├── Entity.hpp             # Entity class
+│   ├── Component.hpp/cpp      # Component base and registry
 │   ├── System.hpp             # System base (template)
 │   └── World.hpp/cpp          # ECS World
 ├── net/
 │   ├── Socket.hpp/cpp         # UDP socket wrapper
 │   ├── Packet.hpp             # Packet reader/writer
-│   └── Snapshot.hpp/cpp       # Snapshot ve delta compression
+│   └── Snapshot.hpp/cpp       # Snapshot and delta compression
 ├── physics/
 │   └── Physics.hpp/cpp        # Vec3, AABB, BVH
 ├── matchmaker/
-│   └── Matchmaker.hpp/cpp     # Oyun eşleştirme
+│   └── Matchmaker.hpp/cpp     # Game matching
 ├── anti-cheat-lite/
-│   └── AntiCheat.hpp/cpp      # Temel anti-cheat kontrolleri
+│   └── AntiCheat.hpp/cpp      # Basic anti-cheat controls
 ├── src/
-│   ├── Server.hpp/cpp         # Ana sunucu sınıfı
+│   ├── Server.hpp/cpp         # Main server class
 │   ├── main.cpp               # Server entry point
-│   └── TestClient.cpp         # Test istemcisi
-├── build.bat                  # Sunucu derleme script'i
-├── build-client.bat           # İstemci derleme script'i
+│   └── TestClient.cpp         # Test client
+├── build.bat                  # Server build script
+├── build-client.bat           # Client build script
 └── README.md
 ```
 
-## 🛠️ Kurulum ve Derleme
+## 🛠️ Installation and Building
 
-### Gereksinimler
+### Requirements
 
 - **Windows 10/11**
-- **MinGW** (Minimalist GNU for Windows) - `D:\MinGW\bin` dizininde kurulu olmalı
-- **C++17** destekleyen derleyici (g++ 7.0+)
+- **MinGW** (Minimalist GNU for Windows) - Must be installed in `D:\MinGW\bin` directory
+- **C++17** compatible compiler (g++ 7.0+)
 
-### MinGW Kurulumu
+### MinGW Installation
 
-MinGW'nin `D:\MinGW` dizinine kurulu olduğundan emin olun. Eğer farklı bir dizine kuruluysa, `build.bat` ve `build-client.bat` dosyalarındaki `MINGW_PATH` değişkenini güncelleyin.
+Ensure MinGW is installed in the `D:\MinGW` directory. If it's installed in a different location, update the `MINGW_PATH` variable in `build.bat` and `build-client.bat` files.
 
-### Sunucuyu Derleme
+### Building the Server
 
-1. Proje dizinine gidin:
+1. Navigate to the project directory:
 ```bash
 cd "D:\Real-Time Game Server + ECS (FPS-lite  Arena)"
 ```
 
-2. Sunucuyu derlemek için `build.bat` dosyasını çalıştırın:
+2. Run `build.bat` to build the server:
 ```bash
 .\build.bat
 ```
 
-Bu komut `GameServer.exe` yürütülebilir dosyasını oluşturur.
+This will create the `GameServer.exe` executable.
 
-### İstemciyi Derleme
+### Building the Client
 
-1. Proje dizinine gidin:
+1. Navigate to the project directory:
 ```bash
 cd "D:\Real-Time Game Server + ECS (FPS-lite  Arena)"
 ```
 
-2. İstemciyi derlemek için `build-client.bat` dosyasını çalıştırın:
+2. Run `build-client.bat` to build the client:
 ```bash
 .\build-client.bat
 ```
 
-Bu komut `TestClient.exe` yürütülebilir dosyasını oluşturur.
+This will create the `TestClient.exe` executable.
 
-## 🚀 Kullanım
+## 🚀 Usage
 
-### Sunucuyu Çalıştırma
+### Running the Server
 
-Sunucuyu başlatmak için `GameServer.exe` dosyasını çalıştırın:
+To start the server, run the `GameServer.exe` file:
 
 ```bash
-# Varsayılan: port 7777, 60 tick
+# Default: port 7777, 60 tick
 GameServer.exe
 
-# Özel port ve tick rate
+# Custom port and tick rate
 GameServer.exe 7777 60
 ```
 
-Sunucu başarıyla başlatıldığında şu çıktıyı göreceksiniz:
+When the server starts successfully, you will see the following output:
 ```
 === Game Server (FPS-lite / Arena) ===
 C++17 | ECS | Authoritative Server
@@ -115,54 +115,54 @@ Game Server initialized on 0.0.0.0:7777 (Tick Rate: 60)
 Server running. Press Ctrl+C to stop.
 ```
 
-### İstemciyi Çalıştırma
+### Running the Client
 
-Sunucu çalışırken, **yeni bir terminal penceresi** açın ve istemciyi çalıştırın:
+While the server is running, open a **new terminal window** and run the client:
 
 ```bash
-# Varsayılan: 127.0.0.1:7777
+# Default: 127.0.0.1:7777
 TestClient.exe
 
-# Farklı bir sunucu adresi ve portu için
+# For a different server address and port
 TestClient.exe 127.0.0.1 7777
 ```
 
-İstemci şunları yapar:
-1. Server'a `CONNECT` paketi gönderir
-2. Server yanıtını bekler
-3. Her 2 saniyede bir `HEARTBEAT` paketi gönderir
-4. Server'dan gelen paketleri dinler
+The client will:
+1. Send a `CONNECT` packet to the server
+2. Wait for server response
+3. Send `HEARTBEAT` packets every 2 seconds
+4. Listen for packets from the server
 
-### Bağlantı Testi
+### Connection Test
 
-Sunucu terminalinde şu mesajı görmelisiniz:
+You should see the following message in the server terminal:
 ```
 Player 0 connected from 127.0.0.1:XXXXX
 ```
 
-Bu, istemcinin başarıyla bağlandığını gösterir.
+This indicates that the client has successfully connected.
 
-## 🔧 Teknik Detaylar
+## 🔧 Technical Details
 
-### ECS Mimarisi
+### ECS Architecture
 
 - **Entity**: ID + component mask
 - **Component**: Type-safe component registry
 - **System**: Template-based system with component filtering
-- **World**: Entity/component/system yönetimi
+- **World**: Entity/component/system management
 
 ### Network
 
-- UDP socket abstraction (Windows/Linux uyumlu)
+- UDP socket abstraction (Windows/Linux compatible)
 - Packet header: type, sequence, tick, playerID
-- Snapshot history (64 snapshot)
-- Delta compression altyapısı hazır (implementation TODO)
+- Snapshot history (64 snapshots)
+- Infrastructure ready for delta compression (implementation TODO)
 
 ### Physics
 
 - BVH (Bounding Volume Hierarchy) spatial partitioning
 - AABB collision detection
-- Vec3 matematik kütüphanesi
+- Vec3 math library
 
 ### Matchmaker
 
@@ -176,46 +176,46 @@ Bu, istemcinin başarıyla bağlandığını gösterir.
 - Movement speed validation
 - Suspicious action tracking
 
-## 📊 Geliştirme Durumu
+## 📊 Development Status
 
-**✅ Tamamlanan:**
-- Temel mimari
+**✅ Completed:**
+- Basic architecture
 - ECS framework
-- Network katmanı
-- Sunucu çerçevesi
-- Physics temel yapısı
-- Test istemcisi
+- Network layer
+- Server framework
+- Basic physics structure
+- Test client
 
-**⏳ Devam Eden:**
+**⏳ In Progress:**
 - Snapshot serialization
 - Delta compression implementation
 - Lag compensation
 - Rollback/rewind
 
-**📋 Planlanan:**
-- Deterministik simülasyon
+**📋 Planned:**
+- Deterministic simulation
 - Lua/AngelScript scripting
-- Glicko-2 rating sistemi
+- Glicko-2 rating system
 - Profiling tools
 
-## ⚠️ Önemli Notlar
+## ⚠️ Important Notes
 
-- **C++ Standardı**: Proje C++17 standardı kullanmaktadır (MinGW 13.2.0 ile C++20 uyumsuzluğu nedeniyle)
-- **MinGW Versiyonu**: MinGW 13.2.0 ile test edilmiştir
-- **Platform**: Şu anda Windows için optimize edilmiştir, Linux desteği planlanmaktadır
-- **Production Kullanımı**: Bu proje aktif geliştirme aşamasındadır. Production kullanımı için ek testler ve optimizasyonlar gereklidir
+- **C++ Standard**: The project uses C++17 standard (due to MinGW 13.2.0 C++20 incompatibility)
+- **MinGW Version**: Tested with MinGW 13.2.0
+- **Platform**: Currently optimized for Windows, Linux support is planned
+- **Production Use**: This project is in active development. Additional tests and optimizations are required for production use
 
-## 📝 Lisans
+## 📝 License
 
-Bu proje eğitim/öğrenme amaçlıdır.
+This project is for educational/learning purposes.
 
-## 🤝 Katkıda Bulunma
+## 🤝 Contributing
 
-Katkılarınızı bekliyoruz! Lütfen pull request göndermeden önce:
-1. Kodunuzun temiz ve okunabilir olduğundan emin olun
-2. Mevcut kod stilini takip edin
-3. Test istemcisi ile bağlantıyı test edin
+Contributions are welcome! Before submitting a pull request, please:
+1. Ensure your code is clean and readable
+2. Follow the existing code style
+3. Test the connection with the test client
 
-## 📧 İletişim
+## 📧 Contact
 
-Sorularınız veya önerileriniz için issue açabilirsiniz.
+Feel free to open an issue for questions or suggestions.
