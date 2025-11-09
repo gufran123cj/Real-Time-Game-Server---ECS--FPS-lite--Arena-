@@ -165,8 +165,8 @@ int main(int argc, char* argv[]) {
                                         Position pos;
                                         if (pos.deserialize(reader)) {
                                             view.x = pos.value.x;
-                                            view.y = pos.value.y;
-                                            view.z = pos.value.z;
+                                            view.y = pos.value.y;  // Y eksenini kullan
+                                            view.z = 0.0f;  // Z kullanma
                                         }
                                     } else if (typeID == PlayerComponent::getStaticTypeID()) {
                                         PlayerComponent playerComp;
@@ -253,16 +253,16 @@ int main(int argc, char* argv[]) {
         }
         
         if (ownPlayer) {
-            camera.target = (Vector2){ownPlayer->x, ownPlayer->z};
+            camera.target = (Vector2){ownPlayer->x, ownPlayer->y};
         } else if (!players.empty()) {
-            float avgX = 0, avgZ = 0;
+            float avgX = 0, avgY = 0;
             for (const auto& player : players) {
                 avgX += player.x;
-                avgZ += player.z;
+                avgY += player.y;
             }
             avgX /= players.size();
-            avgZ /= players.size();
-            camera.target = (Vector2){avgX, avgZ};
+            avgY /= players.size();
+            camera.target = (Vector2){avgX, avgY};
         }
         
         // Camera zoom controls (mouse wheel + keyboard)
@@ -301,8 +301,8 @@ int main(int argc, char* argv[]) {
         
         // Draw players
         for (const auto& player : players) {
-            // Convert 3D position to 2D (top-down: X->X, Z->Y)
-            Vector2 pos2D = {player.x, player.z};
+            // Convert 3D position to 2D (top-down: X->X, Y->Y)
+            Vector2 pos2D = {player.x, player.y};
             
             // Draw player circle
             DrawCircleV(pos2D, 0.5f, player.color);
