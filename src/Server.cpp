@@ -272,11 +272,24 @@ void GameServer::sendSnapshots() {
     // Get all player entities in default room
     auto playerEntities = defaultRoom->world.queryEntities<components::PlayerComponent>();
     
+    // Get all static objects (walls) - entities with Position + CollisionComponent (static)
+    auto allEntities = defaultRoom->world.queryEntities<components::Position, components::CollisionComponent>();
+    std::vector<EntityID> wallEntities;
+    for (EntityID entityID : allEntities) {
+        // Check if it's a static object (wall) and not a player
+        auto* collision = defaultRoom->world.getComponent<components::CollisionComponent>(entityID);
+        auto* playerComp = defaultRoom->world.getComponent<components::PlayerComponent>(entityID);
+        if (collision && collision->isStatic && !playerComp) {
+            wallEntities.push_back(entityID);
+        }
+    }
+    
     // Debug: Log room state (always log first 20 times)
     static int debugRoomStateCount = 0;
     if (debugRoomStateCount < 20) {
         std::cout << "[DEBUG] sendSnapshots: Room 0 active, " << playerEntities.size() 
-                  << " entities, " << players.size() << " connected players" << std::endl;
+                  << " player entities, " << wallEntities.size() << " wall entities, " 
+                  << players.size() << " connected players" << std::endl;
         debugRoomStateCount++;
     }
     
@@ -338,11 +351,11 @@ void GameServer::sendSnapshots() {
         writer.write(header);
         
         // Phase 4: Component-based snapshot serialization
-        // Write entity count
-        uint8_t entityCount = static_cast<uint8_t>(playerEntities.size());
+        // Write entity count (players + walls)
+        uint8_t entityCount = static_cast<uint8_t>(playerEntities.size() + wallEntities.size());
         writer.write(entityCount);
         
-        // Write each entity's data using component serialization
+        // Write player entities first
         for (EntityID entityID : playerEntities) {
             // Write Entity ID
             writer.write(entityID);
@@ -471,6 +484,43 @@ void GameServer::sendSnapshots() {
             }
         }
         
+        // Write wall entities (static objects)
+        for (EntityID entityID : wallEntities) {
+            // Write Entity ID
+            writer.write(entityID);
+            
+            // Get components for walls
+            auto* pos = defaultRoom->world.getComponent<components::Position>(entityID);
+            auto* collision = defaultRoom->world.getComponent<components::CollisionComponent>(entityID);
+            
+            // Count components to serialize
+            uint8_t componentCount = 0;
+            if (pos) componentCount++;
+            if (collision) componentCount++;
+            
+            writer.write(componentCount);
+            
+            // Serialize Position
+            if (pos) {
+                ComponentTypeID typeID = pos->getTypeID();
+                size_t actualSize = pos->getSerializedSize();
+                uint16_t size = static_cast<uint16_t>(actualSize);
+                writer.write(typeID);
+                writer.write(size);
+                pos->serialize(writer);
+            }
+            
+            // Serialize CollisionComponent
+            if (collision) {
+                ComponentTypeID typeID = collision->getTypeID();
+                size_t actualSize = collision->getSerializedSize();
+                uint16_t size = static_cast<uint16_t>(actualSize);
+                writer.write(typeID);
+                writer.write(size);
+                collision->serialize(writer);
+            }
+        }
+        
         // Send snapshot (even if empty - viewer needs to know there are no players)
         if (writer.getSize() > sizeof(net::PacketHeader)) {
             if (socket->send(player->address, writer.getData(), writer.getSize())) {
@@ -551,17 +601,20 @@ RoomID GameServer::createRoom(int tickRate) {
     auto physicsSystem = std::make_unique<systems::PhysicsSystem>();
     rooms[id]->world.addSystem(std::move(physicsSystem));
     
+    // Create map objects (walls, obstacles)
+    createMapObjects(rooms[id].get());
+    
     std::cout << "Room " << id << " created (Tick Rate: " << tickRate << ") - Movement & Physics Systems added" << std::endl;
-    std::cout << "Mini Game ASCII Map will render every 1 second..." << std::endl;
+    std::cout << "Map size: 150x150 (-75 to +75)" << std::endl;
     return id;
 }
 
 EntityID GameServer::createPlayerEntity(Room* room, PlayerID playerID) {
     if (!room) return INVALID_ENTITY;
     
-    // Harita sınırları (PhysicsSystem'deki worldBounds ile aynı)
-    const float MAP_MIN = -50.0f;
-    const float MAP_MAX = 50.0f;
+    // Harita sınırları (PhysicsSystem'deki worldBounds ile aynı) - 150x150 map
+    const float MAP_MIN = -75.0f;
+    const float MAP_MAX = 75.0f;
     const float MIN_SPAWN_DISTANCE = 5.0f;  // Mevcut oyunculara minimum mesafe
     const int MAX_SPAWN_ATTEMPTS = 50;  // Maksimum deneme sayısı
     
@@ -697,6 +750,59 @@ EntityID GameServer::createPlayerEntity(Room* room, PlayerID playerID) {
     std::cout << "==========================================\n" << std::endl;
     
     return entityID;
+}
+
+void GameServer::createMapObjects(Room* room) {
+    if (!room) return;
+    
+    // Harita sınırları (150x150)
+    const float MAP_MIN = -75.0f;
+    const float MAP_MAX = 75.0f;
+    
+    // Köşe duvarları ve engeller
+    std::vector<std::pair<physics::Vec3, physics::Vec3>> wallPositions = {
+        // Köşe blokları (büyük)
+        {physics::Vec3(-70.0f, -70.0f, 0.0f), physics::Vec3(8.0f, 8.0f, 2.0f)},  // Sol-alt köşe
+        {physics::Vec3(70.0f, -70.0f, 0.0f), physics::Vec3(8.0f, 8.0f, 2.0f)},   // Sağ-alt köşe
+        {physics::Vec3(-70.0f, 70.0f, 0.0f), physics::Vec3(8.0f, 8.0f, 2.0f)},   // Sol-üst köşe
+        {physics::Vec3(70.0f, 70.0f, 0.0f), physics::Vec3(8.0f, 8.0f, 2.0f)},    // Sağ-üst köşe
+        
+        // Orta bölge engelleri (küçük bloklar)
+        {physics::Vec3(0.0f, 0.0f, 0.0f), physics::Vec3(6.0f, 6.0f, 2.0f)},      // Merkez
+        {physics::Vec3(-30.0f, -30.0f, 0.0f), physics::Vec3(4.0f, 4.0f, 2.0f)},  // Sol-alt bölge
+        {physics::Vec3(30.0f, -30.0f, 0.0f), physics::Vec3(4.0f, 4.0f, 2.0f)},   // Sağ-alt bölge
+        {physics::Vec3(-30.0f, 30.0f, 0.0f), physics::Vec3(4.0f, 4.0f, 2.0f)},   // Sol-üst bölge
+        {physics::Vec3(30.0f, 30.0f, 0.0f), physics::Vec3(4.0f, 4.0f, 2.0f)},    // Sağ-üst bölge
+        
+        // Ek engeller (rastgele dağılım)
+        {physics::Vec3(-50.0f, 0.0f, 0.0f), physics::Vec3(3.0f, 3.0f, 2.0f)},
+        {physics::Vec3(50.0f, 0.0f, 0.0f), physics::Vec3(3.0f, 3.0f, 2.0f)},
+        {physics::Vec3(0.0f, -50.0f, 0.0f), physics::Vec3(3.0f, 3.0f, 2.0f)},
+        {physics::Vec3(0.0f, 50.0f, 0.0f), physics::Vec3(3.0f, 3.0f, 2.0f)},
+    };
+    
+    int wallCount = 0;
+    for (const auto& [center, size] : wallPositions) {
+        EntityID wallEntity = room->world.createEntity();
+        
+        // Position component
+        auto position = std::make_unique<components::Position>(center.x, center.y, center.z);
+        room->world.addComponent<components::Position>(wallEntity, std::move(position));
+        
+        // CollisionComponent (static wall)
+        auto collision = components::CollisionComponent::fromCenterSize(
+            center,
+            size,
+            true,  // isStatic = true (duvarlar hareket etmez)
+            false  // isTrigger = false (duvarlar collision yapar)
+        );
+        room->world.addComponent<components::CollisionComponent>(wallEntity,
+            std::make_unique<components::CollisionComponent>(collision));
+        
+        wallCount++;
+    }
+    
+    std::cout << "[Map] Created " << wallCount << " map objects (walls/obstacles)" << std::endl;
 }
 
 EntityID GameServer::getPlayerEntity(Room* room, PlayerID playerID) {

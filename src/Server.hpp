@@ -69,6 +69,7 @@ private:
     void processMatchmaking();  // Process matchmaking queue
     Room* getOrCreateRoom(RoomID roomID);
     EntityID createPlayerEntity(Room* room, PlayerID playerID);
+    void createMapObjects(Room* room);  // Harita görselleri (duvarlar, engeller)
     void processInputPacket(Player* player, net::PacketReader& reader, SequenceNumber sequence);
     EntityID getPlayerEntity(Room* room, PlayerID playerID);
     void handleFindMatch(Player* player);

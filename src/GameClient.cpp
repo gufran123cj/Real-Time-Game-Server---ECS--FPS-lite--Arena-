@@ -7,6 +7,8 @@
 #include "../components/Position.hpp"
 #include "../components/PlayerComponent.hpp"
 #include "../components/InputComponent.hpp"
+#include "../components/CollisionComponent.hpp"
+#include "../physics/Physics.hpp"
 #include "../ecs/Component.hpp"
 #include <iostream>
 #include <vector>
@@ -32,6 +34,14 @@ struct PlayerView {
     
     PlayerView() : id(INVALID_PLAYER), x(0), y(0), z(0), yaw(0), inputFlags(0), 
                    color(WHITE) {}
+};
+
+// Wall view structure
+struct WallView {
+    float x, y, z;
+    float width, height, depth;
+    
+    WallView() : x(0), y(0), z(0), width(0), height(0), depth(0) {}
 };
 
 // Camera settings for top-down view (using Raylib's Camera2D)
@@ -73,6 +83,7 @@ int main(int argc, char* argv[]) {
     
     // Player data storage
     std::vector<PlayerView> players;
+    std::vector<WallView> walls;  // Wall/obstacle data storage
     
     // Camera for top-down view (Raylib Camera2D)
     Camera2D camera = {0};
@@ -140,7 +151,9 @@ int main(int argc, char* argv[]) {
                         uint8_t entityCount = 0;
                         if (reader.read(entityCount)) {
                             players.clear();
+                            walls.clear();
                             players.reserve(entityCount);
+                            walls.reserve(entityCount);
                             
                             for (uint8_t i = 0; i < entityCount; i++) {
                                 EntityID entityID = INVALID_ENTITY;
@@ -151,6 +164,9 @@ int main(int argc, char* argv[]) {
                                 
                                 PlayerView view;
                                 view.id = INVALID_PLAYER;
+                                
+                                WallView wallView;
+                                bool isWall = false;
                                 
                                 for (uint8_t j = 0; j < componentCount; j++) {
                                     ComponentTypeID typeID = 0;
@@ -167,6 +183,9 @@ int main(int argc, char* argv[]) {
                                             view.x = pos.value.x;
                                             view.y = pos.value.y;  // Y eksenini kullan
                                             view.z = 0.0f;  // Z kullanma
+                                            wallView.x = pos.value.x;
+                                            wallView.y = pos.value.y;
+                                            wallView.z = pos.value.z;
                                         }
                                     } else if (typeID == PlayerComponent::getStaticTypeID()) {
                                         PlayerComponent playerComp;
@@ -180,6 +199,18 @@ int main(int argc, char* argv[]) {
                                             view.yaw = input.mouseYaw;
                                             view.inputFlags = input.flags;
                                         }
+                                    } else if (typeID == CollisionComponent::getStaticTypeID()) {
+                                        CollisionComponent collision;
+                                        if (collision.deserialize(reader)) {
+                                            // Check if it's a static wall
+                                            if (collision.isStatic) {
+                                                isWall = true;
+                                                physics::Vec3 size = collision.bounds.size();
+                                                wallView.width = size.x;
+                                                wallView.height = size.y;
+                                                wallView.depth = size.z;
+                                            }
+                                        }
                                     } else {
                                         // Skip unknown components
                                         reader.setPosition(componentDataStart + componentSize);
@@ -192,8 +223,11 @@ int main(int argc, char* argv[]) {
                                     }
                                 }
                                 
+                                // Add to appropriate list
                                 if (view.id != INVALID_PLAYER) {
                                     players.push_back(view);
+                                } else if (isWall) {
+                                    walls.push_back(wallView);
                                 }
                             }
                         }
@@ -287,9 +321,9 @@ int main(int argc, char* argv[]) {
         // Draw grid
         BeginMode2D(camera);
         
-        // Draw world grid
+        // Draw world grid (150x150 map)
         const float gridSize = 10.0f;
-        const int gridLines = 50;
+        const int gridLines = 75;  // 150/2 = 75
         Color gridColor = (Color){40, 40, 50, 255};
         
         for (int i = -gridLines; i <= gridLines; i++) {
@@ -297,9 +331,28 @@ int main(int argc, char* argv[]) {
             DrawLine(-gridLines * gridSize, i * gridSize, gridLines * gridSize, i * gridSize, gridColor);
         }
         
-        // Draw world boundaries
-        const float worldSize = 50.0f;
+        // Draw world boundaries (150x150 map)
+        const float worldSize = 75.0f;
         DrawRectangleLines(-worldSize, -worldSize, worldSize * 2, worldSize * 2, (Color){100, 100, 100, 255});
+        
+        // Draw walls/obstacles
+        for (const auto& wall : walls) {
+            // Convert 3D position to 2D (top-down: X->X, Y->Y)
+            Vector2 pos2D = {wall.x, -wall.y};  // Y eksenini ters çevir
+            
+            // Draw wall rectangle (top-down view: width x height)
+            Rectangle wallRect = {
+                pos2D.x - wall.width * 0.5f,
+                pos2D.y - wall.height * 0.5f,
+                wall.width,
+                wall.height
+            };
+            
+            // Draw filled rectangle (dark gray)
+            DrawRectangleRec(wallRect, (Color){60, 60, 80, 255});
+            // Draw outline (lighter gray)
+            DrawRectangleLinesEx(wallRect, 0.1f, (Color){100, 100, 120, 255});
+        }
         
         // Draw players
         for (const auto& player : players) {

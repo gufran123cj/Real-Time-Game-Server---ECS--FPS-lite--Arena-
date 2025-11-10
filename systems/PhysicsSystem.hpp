@@ -27,11 +27,10 @@ private:
     
 public:
     PhysicsSystem() : useWorldBounds(true) {
-        // Default world bounds: -50 to +50 on X and Y axes (2D top-down)
-        // Y ekseni için geniş sınırlar (2D oyun için)
+        // Default world bounds: -75 to +75 on X and Y axes (150x150 map, 2D top-down)
         worldBounds = physics::AABB(
-            physics::Vec3(-50.0f, -50.0f, -50.0f),
-            physics::Vec3(50.0f, 50.0f, 50.0f)
+            physics::Vec3(-75.0f, -75.0f, -50.0f),
+            physics::Vec3(75.0f, 75.0f, 50.0f)
         );
     }
     
