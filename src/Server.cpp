@@ -8,6 +8,10 @@
 #include <iostream>
 #include <thread>
 #include <algorithm>
+#include <cstring>
+#include <cmath>
+#include <random>
+#include <ctime>
 
 namespace game {
 
@@ -74,6 +78,9 @@ void GameServer::run() {
             }
         }
         
+        // Process matchmaking queue (every tick)
+        processMatchmaking();
+        
         // Send snapshots
         if (loopCount <= 10) {
             std::cout << "[DEBUG] About to call sendSnapshots()..." << std::endl;
@@ -129,19 +136,8 @@ void GameServer::processPackets() {
                       << packet.from.ip << ":" << packet.from.port << std::endl;
         }
         
-        // Handle packets from unknown players (might be HEARTBEAT from viewer)
-        if (!player && header.type == net::PacketType::HEARTBEAT) {
-            // Viewer might send HEARTBEAT before CONNECT is processed
-            // Create player for this address
-            PlayerID newID = addPlayer(packet.from);
-            player = players[newID].get();
-            
-            Room* defaultRoom = getOrCreateRoom(0);
-            player->currentRoom = defaultRoom->id;
-            
-            std::cout << "[DEBUG] Created player " << newID << " from HEARTBEAT (viewer?) from " 
-                      << packet.from.ip << ":" << packet.from.port << std::endl;
-        }
+        // HEARTBEAT from unknown players is ignored - only CONNECT creates new players
+        // (This prevents creating duplicate players from HEARTBEAT packets)
         
         if (player) {
             player->lastSeenTick = serverTick;
@@ -170,6 +166,12 @@ void GameServer::processPackets() {
                         }
                     }
                     break;
+                case net::PacketType::FIND_MATCH:
+                    handleFindMatch(player);
+                    break;
+                case net::PacketType::CANCEL_MATCH:
+                    handleCancelMatch(player);
+                    break;
                 default:
                     break;
             }
@@ -182,6 +184,52 @@ void GameServer::updateRooms(float deltaTime) {
         if (room->isActive) {
             room->world.update(deltaTime);
             room->currentTick++;
+            
+            // Anti-Cheat: Validate movement speed for all players in room
+            // Also: Clear stale input (if no input received for 60 ticks = 1 second)
+            Room* roomPtr = room.get();
+            const Tick INPUT_TIMEOUT_TICKS = 60;  // 1 saniye timeout
+            
+            for (PlayerID playerID : roomPtr->players) {
+                auto playerIt = players.find(playerID);
+                if (playerIt == players.end() || !playerIt->second->connected) {
+                    continue;
+                }
+                
+                EntityID entityID = getPlayerEntity(roomPtr, playerID);
+                if (entityID == INVALID_ENTITY) continue;
+                
+                // Clear stale input: Eğer son input 60 tick'ten eskiyse, flags'ı sıfırla
+                auto* inputComp = roomPtr->world.getComponent<components::InputComponent>(entityID);
+                if (inputComp) {
+                    Tick ticksSinceLastInput = roomPtr->currentTick - inputComp->inputTick;
+                    if (ticksSinceLastInput > INPUT_TIMEOUT_TICKS) {
+                        // Input çok eski, flags'ı sıfırla (karakterin durması için)
+                        inputComp->flags = components::INPUT_NONE;
+                    }
+                }
+                
+                // Anti-Cheat: Movement validation TEMPORARILY DISABLED for testing
+                /*
+                auto* posComp = roomPtr->world.getComponent<components::Position>(entityID);
+                if (posComp) {
+                    // Validate movement speed
+                    if (!antiCheat.validateMovement(playerID, posComp->value, deltaTime)) {
+                        std::cout << "[Anti-Cheat] Player " << playerID 
+                                  << " exceeded movement speed limit (suspicious: " 
+                                  << antiCheat.getSuspiciousCount(playerID) << ")" << std::endl;
+                        
+                        // Check if should kick
+                        if (antiCheat.shouldKick(playerID)) {
+                            std::cout << "[Anti-Cheat] Kicking Player " << playerID 
+                                      << " for suspicious movement" << std::endl;
+                            removePlayer(playerID);
+                            continue;
+                        }
+                    }
+                }
+                */
+            }
             
             // Mini Game map rendering moved to MiniGameViewer.exe
             // (Will use snapshot system in Phase 4)
@@ -479,6 +527,13 @@ void GameServer::removePlayer(PlayerID playerID) {
                 );
             }
         }
+        
+        // Remove from matchmaking queue
+        playersInQueue.erase(playerID);
+        
+        // Reset anti-cheat stats
+        antiCheat.resetPlayer(playerID);
+        
         players.erase(it);
         std::cout << "Player " << playerID << " disconnected" << std::endl;
     }
@@ -504,11 +559,72 @@ RoomID GameServer::createRoom(int tickRate) {
 EntityID GameServer::createPlayerEntity(Room* room, PlayerID playerID) {
     if (!room) return INVALID_ENTITY;
     
+    // Harita sınırları (PhysicsSystem'deki worldBounds ile aynı)
+    const float MAP_MIN = -50.0f;
+    const float MAP_MAX = 50.0f;
+    const float MIN_SPAWN_DISTANCE = 5.0f;  // Mevcut oyunculara minimum mesafe
+    const int MAX_SPAWN_ATTEMPTS = 50;  // Maksimum deneme sayısı
+    
+    // Mevcut oyuncuların konumlarını topla
+    auto existingPlayers = room->world.queryEntities<components::PlayerComponent>();
+    std::vector<physics::Vec3> existingPositions;
+    for (EntityID existingEntityID : existingPlayers) {
+        auto* existingPos = room->world.getComponent<components::Position>(existingEntityID);
+        if (existingPos) {
+            existingPositions.push_back(existingPos->value);
+        }
+    }
+    
+    // Random spawn konumu bul (mevcut oyunculara çok yakın olmayan)
+    static std::mt19937 rng(static_cast<unsigned int>(std::time(nullptr)));
+    std::uniform_real_distribution<float> distX(MAP_MIN, MAP_MAX);
+    std::uniform_real_distribution<float> distY(MAP_MIN, MAP_MAX);
+    
+    float spawnX = 0.0f;
+    float spawnY = 0.0f;
+    float spawnZ = 0.0f;
+    bool foundValidSpawn = false;
+    
+    // Uygun spawn konumu bul
+    for (int attempt = 0; attempt < MAX_SPAWN_ATTEMPTS; ++attempt) {
+        spawnX = distX(rng);
+        spawnY = distY(rng);
+        spawnZ = 0.0f;
+        
+        // Mevcut oyunculara minimum mesafede mi kontrol et
+        bool tooClose = false;
+        for (const auto& existingPos : existingPositions) {
+            float dx = spawnX - existingPos.x;
+            float dy = spawnY - existingPos.y;
+            float distance = std::sqrt(dx * dx + dy * dy);
+            
+            if (distance < MIN_SPAWN_DISTANCE) {
+                tooClose = true;
+                break;
+            }
+        }
+        
+        if (!tooClose) {
+            foundValidSpawn = true;
+            break;
+        }
+    }
+    
+    // Eğer uygun konum bulunamazsa, merkeze yakın bir yere spawn et
+    if (!foundValidSpawn) {
+        spawnX = distX(rng) * 0.3f;  // Merkeze yakın
+        spawnY = distY(rng) * 0.3f;
+        std::cout << "[Spawn] Warning: Could not find ideal spawn position for Player " 
+                  << playerID << ", using fallback position (" << spawnX << ", " << spawnY << ")" << std::endl;
+    } else {
+        std::cout << "[Spawn] Player " << playerID << " spawned at (" << spawnX << ", " << spawnY << ")" << std::endl;
+    }
+    
     // Create entity
     EntityID entityID = room->world.createEntity();
     
     // Add components
-    auto position = std::make_unique<components::Position>(0.0f, 0.0f, 0.0f);
+    auto position = std::make_unique<components::Position>(spawnX, spawnY, spawnZ);
     auto velocity = std::make_unique<components::Velocity>(0.0f, 0.0f, 0.0f);
     auto health = std::make_unique<components::Health>(100.0f);
     auto playerComp = std::make_unique<components::PlayerComponent>(playerID);
@@ -526,7 +642,7 @@ EntityID GameServer::createPlayerEntity(Room* room, PlayerID playerID) {
     
     // Add CollisionComponent for physics (Phase 5)
     auto collision = components::CollisionComponent::fromCenterSize(
-        physics::Vec3(0.0f, 0.0f, 0.0f),
+        physics::Vec3(spawnX, spawnY, spawnZ),  // Spawn konumunda collision
         physics::Vec3(1.0f, 2.0f, 1.0f), // Player size: 1x2x1 (width x height x depth)
         false, // Not static
         false  // Not a trigger
@@ -601,6 +717,25 @@ EntityID GameServer::getPlayerEntity(Room* room, PlayerID playerID) {
 void GameServer::processInputPacket(Player* player, net::PacketReader& reader, SequenceNumber sequence) {
     if (!player || player->currentRoom == INVALID_ROOM) return;
     
+    // Anti-Cheat: TEMPORARILY DISABLED for testing
+    // TODO: Re-enable and fix rate limiting (should not count HEARTBEAT packets)
+    /*
+    antiCheat.recordPacket(player->id);
+    
+    if (!antiCheat.checkPacketRate(player->id)) {
+        std::cout << "[Anti-Cheat] Player " << player->id 
+                  << " exceeded packet rate limit (suspicious: " 
+                  << antiCheat.getSuspiciousCount(player->id) << ")" << std::endl;
+        
+        // Check if should kick
+        if (antiCheat.shouldKick(player->id)) {
+            std::cout << "[Anti-Cheat] Kicking Player " << player->id << " for suspicious activity" << std::endl;
+            removePlayer(player->id);
+            return;
+        }
+    }
+    */
+    
     // Find player's room
     auto roomIt = rooms.find(player->currentRoom);
     if (roomIt == rooms.end()) return;
@@ -653,6 +788,149 @@ void GameServer::shutdown() {
     if (socket && socket->isOpen()) {
         socket->close();
     }
+}
+
+// Simple Matchmaking Implementation (no rating system)
+void GameServer::handleFindMatch(Player* player) {
+    if (!player || !player->connected) {
+        return;
+    }
+    
+    // Check if player is already in queue
+    if (playersInQueue.find(player->id) != playersInQueue.end()) {
+        std::cout << "[Matchmaking] Player " << player->id << " is already in queue" << std::endl;
+        return;
+    }
+    
+    // Add player to queue
+    matchmakingQueue.push(player->id);
+    playersInQueue.insert(player->id);
+    
+    std::cout << "[Matchmaking] Player " << player->id << " added to matchmaking queue (queue size: " 
+              << matchmakingQueue.size() << ")" << std::endl;
+}
+
+void GameServer::handleCancelMatch(Player* player) {
+    if (!player) {
+        return;
+    }
+    
+    // Remove from set (queue will be cleaned up during processing)
+    playersInQueue.erase(player->id);
+    
+    std::cout << "[Matchmaking] Player " << player->id << " cancelled matchmaking" << std::endl;
+}
+
+void GameServer::processMatchmaking() {
+    // Try to form matches from queue
+    while (matchmakingQueue.size() >= static_cast<size_t>(PLAYERS_PER_MATCH)) {
+        std::vector<PlayerID> matchPlayers;
+        
+        // Collect players for match
+        for (int i = 0; i < PLAYERS_PER_MATCH; ++i) {
+            if (matchmakingQueue.empty()) {
+                break;
+            }
+            
+            PlayerID playerID = matchmakingQueue.front();
+            matchmakingQueue.pop();
+            
+            // Check if player is still in queue set (might have cancelled)
+            if (playersInQueue.find(playerID) == playersInQueue.end()) {
+                continue; // Player cancelled, skip
+            }
+            
+            // Check if player still exists and is connected
+            auto it = players.find(playerID);
+            if (it == players.end() || !it->second->connected) {
+                playersInQueue.erase(playerID);
+                continue; // Player disconnected, skip
+            }
+            
+            matchPlayers.push_back(playerID);
+            playersInQueue.erase(playerID);
+        }
+        
+        // If we have enough players, create match
+        if (matchPlayers.size() >= static_cast<size_t>(PLAYERS_PER_MATCH)) {
+            // Create new room for match
+            RoomID newRoomID = createRoom();
+            Room* newRoom = rooms[newRoomID].get();
+            
+            std::cout << "[Matchmaking] Match found! Room " << newRoomID 
+                      << " created with " << matchPlayers.size() << " players" << std::endl;
+            
+            // Add players to room and create entities
+            for (PlayerID playerID : matchPlayers) {
+                auto it = players.find(playerID);
+                if (it != players.end() && it->second->connected) {
+                    Player* player = it->second.get();
+                    
+                    // Remove from old room if any
+                    if (player->currentRoom != INVALID_ROOM) {
+                        auto oldRoomIt = rooms.find(player->currentRoom);
+                        if (oldRoomIt != rooms.end()) {
+                            auto& oldRoomPlayers = oldRoomIt->second->players;
+                            oldRoomPlayers.erase(
+                                std::remove(oldRoomPlayers.begin(), oldRoomPlayers.end(), playerID),
+                                oldRoomPlayers.end()
+                            );
+                        }
+                    }
+                    
+                    // Add to new room
+                    player->currentRoom = newRoomID;
+                    newRoom->players.push_back(playerID);
+                    
+                    // Create player entity in new room
+                    createPlayerEntity(newRoom, playerID);
+                    
+                    // Notify player
+                    sendMatchFound(playerID, newRoomID);
+                    
+                    std::cout << "[Matchmaking] Player " << playerID << " assigned to room " << newRoomID << std::endl;
+                }
+            }
+        } else {
+            // Not enough players, put them back in queue
+            for (PlayerID playerID : matchPlayers) {
+                matchmakingQueue.push(playerID);
+                playersInQueue.insert(playerID);
+            }
+            break; // Can't form more matches
+        }
+    }
+}
+
+void GameServer::sendMatchFound(PlayerID playerID, RoomID roomID) {
+    auto it = players.find(playerID);
+    if (it == players.end() || !it->second->connected) {
+        return;
+    }
+    
+    Player* player = it->second.get();
+    
+    // Build MATCH_FOUND packet
+    net::PacketWriter writer;
+    net::PacketHeader header;
+    header.type = net::PacketType::MATCH_FOUND;
+    header.sequence = 0;
+    header.serverTick = serverTick;
+    header.playerID = playerID;
+    
+    if (!writer.write(header)) {
+        return;
+    }
+    
+    // Write room ID
+    if (!writer.write(roomID)) {
+        return;
+    }
+    
+    // Send packet
+    socket->send(player->address, writer.getData(), writer.getSize());
+    
+    std::cout << "[Matchmaking] MATCH_FOUND sent to Player " << playerID << " (Room " << roomID << ")" << std::endl;
 }
 
 } // namespace game

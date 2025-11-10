@@ -51,6 +51,7 @@ public:
         // Client'ta Y ekseni ters çevriliyor (-player.y), bu yüzden:
         // Oyun sisteminde Y artarsa, ekranda yukarı gider
         // Oyun sisteminde Y azalırsa, ekranda aşağı gider
+        // NOT: Eski input'lar updateRooms()'da temizleniyor (60 tick timeout)
         if (input.isPressed(components::INPUT_FORWARD))  moveY += 1.0f;  // W = yukarı (Y artar, ekranda yukarı)
         if (input.isPressed(components::INPUT_BACKWARD)) moveY -= 1.0f;  // S = aşağı (Y azalır, ekranda aşağı)
         if (input.isPressed(components::INPUT_RIGHT))    moveX += 1.0f;  // D = sağ (X artar)
@@ -68,10 +69,10 @@ public:
             velocity.value.y = moveY * speed;  // Y eksenini kullan
             velocity.value.z = 0.0f;  // Z eksenini kullanma
         } else {
-            // 4) Giriş yoksa sürtünme ile yavaşlat
-            velocity.value = velocity.value * 0.8f;
-            if (velocity.value.lengthSq() < 0.01f) {
-                velocity.value = physics::Vec3(0.0f, 0.0f, 0.0f);
+            // Giriş yoksa hızlıca durdur (daha agresif sürtünme)
+            velocity.value = velocity.value * 0.3f;  // Daha hızlı sürtünme (0.8'den 0.3'e)
+            if (velocity.value.lengthSq() < 0.1f) {  // Threshold'u artırdık (0.01'den 0.1'e)
+                velocity.value = physics::Vec3(0.0f, 0.0f, 0.0f);  // Hemen sıfırla
             }
         }
 

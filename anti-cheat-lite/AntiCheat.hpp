@@ -36,7 +36,6 @@ private:
     
     void updatePacketRate(PlayerID playerID);
     bool checkMovementSpeed(PlayerID playerID, const physics::Vec3& newPosition, float deltaTime);
-    bool checkPacketRate(PlayerID playerID);
 
 public:
     AntiCheat() = default;
@@ -44,6 +43,7 @@ public:
     bool validateInput(PlayerID playerID, const net::Packet& packet);
     bool validateMovement(PlayerID playerID, const physics::Vec3& position, float deltaTime);
     void recordPacket(PlayerID playerID);
+    bool checkPacketRate(PlayerID playerID);  // Public for server access
     
     int getSuspiciousCount(PlayerID playerID) const;
     bool shouldKick(PlayerID playerID) const;

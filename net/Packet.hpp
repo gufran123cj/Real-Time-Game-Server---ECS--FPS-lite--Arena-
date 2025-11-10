@@ -18,7 +18,10 @@ enum class PacketType : uint8_t {
     SNAPSHOT,
     DELTA,
     ACK,
-    RPC
+    RPC,
+    FIND_MATCH,      // Client requests matchmaking
+    MATCH_FOUND,     // Server notifies client of match
+    CANCEL_MATCH     // Client cancels matchmaking
 };
 
 struct PacketHeader {
