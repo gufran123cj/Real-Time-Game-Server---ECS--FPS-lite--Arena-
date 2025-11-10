@@ -40,7 +40,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
+    std::cout << "\n=====================================" << std::endl;
     std::cout << "Server running. Press Ctrl+C to stop." << std::endl;
+    std::cout << "\nClient'lardan baglanmak icin:" << std::endl;
+    std::cout << "  GameClient.exe [SERVER_IP] 7777" << std::endl;
+    std::cout << "\nServer IP adresini ogrenmek icin:" << std::endl;
+    std::cout << "  ipconfig | findstr IPv4" << std::endl;
+    std::cout << "=====================================\n" << std::endl;
     server.run();
     
     return 0;
