@@ -5,7 +5,6 @@
 #include "../net/Socket.hpp"
 #include "../net/Packet.hpp"
 #include "../include/common/types.hpp"
-#include "../anti-cheat-lite/AntiCheat.hpp"
 #include <unordered_map>
 #include <memory>
 #include <chrono>
@@ -60,9 +59,7 @@ private:
     std::set<PlayerID> playersInQueue;  // Fast lookup to prevent duplicates
     const int PLAYERS_PER_MATCH = 2;    // 2 players per match (can be changed)
     
-    // Anti-Cheat system
-    anticheat::AntiCheat antiCheat;
-    
+
     void processPackets();
     void updateRooms(float deltaTime);
     void sendSnapshots();

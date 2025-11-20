@@ -2,10 +2,7 @@
 #include "../net/Packet.hpp"
 #include "../components/Components.hpp"
 #include "../components/CollisionComponent.hpp"
-#include "../systems/MovementSystem.hpp"
-#include "../systems/PhysicsSystem.hpp"
 #include "../physics/Physics.hpp"
-#include "../ldtk/LDtkParser.hpp"
 #include <fstream>
 #include <iostream>
 #include <thread>
@@ -583,8 +580,7 @@ void GameServer::removePlayer(PlayerID playerID) {
         // Remove from matchmaking queue
         playersInQueue.erase(playerID);
         
-        // Reset anti-cheat stats
-        antiCheat.resetPlayer(playerID);
+
         
         players.erase(it);
         std::cout << "Player " << playerID << " disconnected" << std::endl;
@@ -595,14 +591,7 @@ RoomID GameServer::createRoom(int tickRate) {
     RoomID id = nextRoomID++;
     rooms[id] = std::make_unique<Room>(id, tickRate);
     
-    // Add Movement System to room's world
-    auto movementSystem = std::make_unique<systems::MovementSystem>();
-    rooms[id]->world.addSystem(std::move(movementSystem));
-    
-    // Add Physics System to room's world (Phase 5)
-    auto physicsSystem = std::make_unique<systems::PhysicsSystem>();
-    rooms[id]->world.addSystem(std::move(physicsSystem));
-    
+
     // Create map objects (walls, obstacles)
     createMapObjects(rooms[id].get());
     
@@ -754,161 +743,7 @@ EntityID GameServer::createPlayerEntity(Room* room, PlayerID playerID) {
     return entityID;
 }
 
-void GameServer::createMapObjects(Room* room) {
-    if (!room) return;
-    
-    // Try to load LDtk map for collision data
-    static std::unique_ptr<ldtk::World> ldtkWorld = nullptr;
-    static ldtk::Level* currentLevel = nullptr;
-    
-    // Load LDtk world once (static, shared across all rooms)
-    if (!ldtkWorld) {
-        ldtkWorld = std::make_unique<ldtk::World>();
-        std::string mapPath = "sprites/map.json";
-        if (ldtk::LDtkParser::loadWorld(mapPath, *ldtkWorld)) {
-            if (!ldtkWorld->levels.empty()) {
-                currentLevel = &ldtkWorld->levels[0];
-                std::cout << "[Server] Loaded LDtk level: " << currentLevel->identifier 
-                          << " (" << currentLevel->pxWid << "x" << currentLevel->pxHei << ")" << std::endl;
-            }
-        } else {
-            std::cout << "[Server] Failed to load LDtk map: " << mapPath << std::endl;
-        }
-    }
-    
-    int wallCount = 0;
-    
-    // If LDtk map loaded, use Collisions layer (IntGrid)
-    if (currentLevel) {
-        // Find Collisions layer (IntGrid type)
-        ldtk::Layer* collisionLayer = nullptr;
-        for (auto& layer : currentLevel->layers) {
-            if (layer.type == "IntGrid" && layer.identifier == "Collisions") {
-                collisionLayer = &layer;
-                break;
-            }
-        }
-        
-        if (collisionLayer && !collisionLayer->intGridCsv.empty()) {
-            // Get layer dimensions from level
-            int levelWidth = currentLevel->pxWid;
-            int levelHeight = currentLevel->pxHei;
-            int gridSize = collisionLayer->gridSize;
-            int gridWidth = levelWidth / gridSize;
-            int gridHeight = levelHeight / gridSize;
-            
-            std::cout << "[Server] Processing collision layer: " << gridWidth << "x" << gridHeight 
-                      << " (gridSize: " << gridSize << ")" << std::endl;
-            std::cout << "[Server] IntGrid CSV size: " << collisionLayer->intGridCsv.size() << std::endl;
-            
-            // Convert IntGrid CSV to collision boxes
-            // IntGrid value > 0 means collision
-            for (int y = 0; y < gridHeight; y++) {
-                for (int x = 0; x < gridWidth; x++) {
-                    int index = y * gridWidth + x;
-                    if (index < static_cast<int>(collisionLayer->intGridCsv.size())) {
-                        int gridValue = collisionLayer->intGridCsv[index];
-                        
-                        if (gridValue > 0) {
-                            // Convert pixel coordinates to world coordinates
-                            // LDtk: (0,0) top-left, our world: center at (0,0)
-                            // Tile position in LDtk is top-left corner, we need center
-                            float pixelX = static_cast<float>(x * gridSize) + gridSize * 0.5f;
-                            float pixelY = static_cast<float>(y * gridSize) + gridSize * 0.5f;
-                            
-                            // Convert to world coordinates (center at origin)
-                            float worldX = (pixelX - levelWidth / 2.0f) / 16.0f;
-                            float worldY = -(pixelY - levelHeight / 2.0f) / 16.0f; // Invert Y
-                            
-                            // Tile size in world units
-                            float tileWorldSize = static_cast<float>(gridSize) / 16.0f;
-                            
-                            // Create collision box
-                            physics::Vec3 center(worldX, worldY, 0.0f);
-                            physics::Vec3 size(tileWorldSize, tileWorldSize, 2.0f);
-                            
-                            EntityID wallEntity = room->world.createEntity();
-                            
-                            // Position component
-                            auto position = std::make_unique<components::Position>(center.x, center.y, center.z);
-                            room->world.addComponent<components::Position>(wallEntity, std::move(position));
-                            
-                            // CollisionComponent (static wall)
-                            auto collision = components::CollisionComponent::fromCenterSize(
-                                center,
-                                size,
-                                true,  // isStatic = true
-                                false  // isTrigger = false
-                            );
-                            room->world.addComponent<components::CollisionComponent>(wallEntity,
-                                std::make_unique<components::CollisionComponent>(collision));
-                            
-                            wallCount++;
-                        }
-                    }
-                }
-            }
-            
-            std::cout << "[Server] Created " << wallCount << " collision boxes from LDtk Collisions layer" << std::endl;
-            
-            // Debug: Print first few collision box positions
-            if (wallCount > 0) {
-                auto wallEntities = room->world.queryEntities<components::CollisionComponent>();
-                int debugCount = 0;
-                for (EntityID eid : wallEntities) {
-                    auto* pos = room->world.getComponent<components::Position>(eid);
-                    auto* coll = room->world.getComponent<components::CollisionComponent>(eid);
-                    if (pos && coll && coll->isStatic && debugCount < 5) {
-                        std::cout << "[Server] Collision box " << debugCount << ": pos=(" 
-                                  << pos->value.x << ", " << pos->value.y << ") size=("
-                                  << coll->bounds.size().x << ", " << coll->bounds.size().y << ")" << std::endl;
-                        debugCount++;
-                    }
-                }
-            }
-            
-            return;
-        } else {
-            if (!collisionLayer) {
-                std::cout << "[Server] WARNING: Collisions layer not found in LDtk map" << std::endl;
-                std::cout << "[Server] Available layers:" << std::endl;
-                for (const auto& layer : currentLevel->layers) {
-                    std::cout << "  - " << layer.identifier << " (type: " << layer.type << ")" << std::endl;
-                }
-            } else {
-                std::cout << "[Server] WARNING: Collisions layer found but intGridCsv is empty" << std::endl;
-            }
-            std::cout << "[Server] Using fallback collision system" << std::endl;
-        }
-    }
-    
-    // Fallback: Hardcoded walls (if LDtk not available)
-    const float MAP_MIN = -75.0f;
-    const float MAP_MAX = 75.0f;
-    
-    std::vector<std::pair<physics::Vec3, physics::Vec3>> wallPositions = {
-        {physics::Vec3(-70.0f, -70.0f, 0.0f), physics::Vec3(8.0f, 8.0f, 2.0f)},
-        {physics::Vec3(70.0f, -70.0f, 0.0f), physics::Vec3(8.0f, 8.0f, 2.0f)},
-        {physics::Vec3(-70.0f, 70.0f, 0.0f), physics::Vec3(8.0f, 8.0f, 2.0f)},
-        {physics::Vec3(70.0f, 70.0f, 0.0f), physics::Vec3(8.0f, 8.0f, 2.0f)},
-        {physics::Vec3(0.0f, 0.0f, 0.0f), physics::Vec3(6.0f, 6.0f, 2.0f)},
-    };
-    
-    for (const auto& [center, size] : wallPositions) {
-        EntityID wallEntity = room->world.createEntity();
-        auto position = std::make_unique<components::Position>(center.x, center.y, center.z);
-        room->world.addComponent<components::Position>(wallEntity, std::move(position));
-        
-        auto collision = components::CollisionComponent::fromCenterSize(
-            center, size, true, false
-        );
-        room->world.addComponent<components::CollisionComponent>(wallEntity,
-            std::make_unique<components::CollisionComponent>(collision));
-        wallCount++;
-    }
-    
-    std::cout << "[Server] Created " << wallCount << " fallback map objects (walls/obstacles)" << std::endl;
-}
+
 
 EntityID GameServer::getPlayerEntity(Room* room, PlayerID playerID) {
     if (!room) return INVALID_ENTITY;

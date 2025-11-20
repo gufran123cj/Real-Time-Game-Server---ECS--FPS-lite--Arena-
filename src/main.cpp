@@ -1,221 +1,80 @@
 #include <iostream>
-
-#include <SFML/Graphics.hpp>
-#include <LDtkLoader/Project.hpp>
-
-#include "TileMap.hpp"
-
-
-auto getPlayerCollider(sf::Shape& player) -> sf::FloatRect {
-    auto bounds = player.getGlobalBounds();
-    sf::FloatRect rect;
-    rect.left = bounds.left;
-    rect.width = bounds.width;
-    rect.top = bounds.top + bounds.height / 2;
-    rect.height = bounds.height / 2;
-    return rect;
-}
-
-auto getColliderShape(const sf::FloatRect& rect) -> sf::RectangleShape {
-    sf::RectangleShape r;
-    r.setSize({rect.width, rect.height});
-    r.setPosition(rect.left, rect.top);
-    r.setFillColor({200, 0, 0, 95});
-    return r;
-}
-
-struct Game {
-    TileMap tilemap;
-    sf::RectangleShape player;
-
-    std::vector<sf::FloatRect> colliders;
-    bool show_colliders = false;
-
-    sf::View camera;
-    sf::FloatRect camera_bounds;
-
-    void init(const ldtk::Project& ldtk, bool reloading = false) {
-        // get the world from the project
-        auto& world = ldtk.getWorld();
-
-        // get first level from the world
-        auto& ldtk_level0 = world.getLevel("Level_0");
-
-        // load the TileMap from the level
-        TileMap::path = ldtk.getFilePath().directory();
-        tilemap.load(ldtk_level0);
-
-        // get Entities layer from level_0
-        auto& entities_layer = ldtk_level0.getLayer("Entities");
-
-        // retrieve collider entities from entities layer and store them in the colliders vector
-        colliders.clear();
-        for (const auto& col : entities_layer.getEntitiesByName("Collider")) {
-            colliders.emplace_back(
-                (float)col.get().getPosition().x, (float)col.get().getPosition().y,
-                (float)col.get().getSize().x, (float)col.get().getSize().y
-            );
-        }
-
-        // get the Player entity, and its 'color' field
-        const auto& player_ent = entities_layer.getEntitiesByName("Player")[0].get();
-        const auto& player_color = player_ent.getField<ldtk::Color>("color").value();
-
-        // initialize player shape
-        player.setSize({8, 16});
-        player.setOrigin(4, 16);
-        if (!reloading) {
-            player.setPosition(static_cast<float>(player_ent.getPosition().x + 8),
-                               static_cast<float>(player_ent.getPosition().y + 16));
-        }
-        player.setFillColor({player_color.r, player_color.g, player_color.b});
-
-        // create camera view
-        camera.setSize({400, 250});
-        camera.zoom(0.55f);
-        camera.setCenter(player.getPosition());
-        camera_bounds.left = 0;
-        camera_bounds.top = 0;
-        camera_bounds.width = static_cast<float>(ldtk_level0.size.x);
-        camera_bounds.height = static_cast<float>(ldtk_level0.size.y);
-    }
-
-    void update() {
-        // move player with keyboard arrows
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
-            player.move(0, -1.5);
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
-            player.move(0, 1.5);
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
-            player.move(-1.5, 0);
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
-            player.move(1.5, 0);
-
-        // do collision checks
-        auto player_collider = getPlayerCollider(player);
-        for (auto& rect : colliders) {
-            sf::FloatRect intersect;
-            if (player_collider.intersects(rect, intersect)) {
-                if (intersect.width < intersect.height) {
-                    if (player_collider.left < intersect.left)
-                        player.move(-intersect.width, 0);
-                    else
-                        player.move(intersect.width, 0);
-                }
-                else {
-                    if (player_collider.top < intersect.top)
-                        player.move(0, -intersect.height);
-                    else
-                        player.move(0, intersect.height);
-                }
-            }
-        }
-
-        // update camera
-        camera.move((player.getPosition() - camera.getCenter())/5.f);
-
-        auto cam_size = camera.getSize();
-
-        {
-            auto cam_pos = camera.getCenter();
-            // check for camera X limit
-            if (cam_pos.x - cam_size.x / 2 < camera_bounds.left) {
-                camera.setCenter(camera_bounds.left + cam_size.x / 2, cam_pos.y);
-            }
-            else if (cam_pos.x + cam_size.x / 2 > camera_bounds.left + camera_bounds.width) {
-                camera.setCenter(camera_bounds.left + camera_bounds.width - cam_size.x / 2, cam_pos.y);
-            }
-        }
-
-        {
-            auto cam_pos = camera.getCenter();
-            // check for camera Y limit
-            if (cam_pos.y - cam_size.y / 2 < camera_bounds.top) {
-                camera.setCenter(cam_pos.x, camera_bounds.top + cam_size.y / 2);
-            }
-            else if (cam_pos.y + cam_size.y / 2 > camera_bounds.top + camera_bounds.height) {
-                camera.setCenter(cam_pos.x, camera_bounds.top + camera_bounds.height - cam_size.y / 2);
-            }
-        }
-    }
-
-    void render(sf::RenderTarget& target) {
-        target.setView(camera);
-
-        // draw map background layers
-        target.draw(tilemap.getLayer("Ground"));
-        target.draw(tilemap.getLayer("Trees"));
-        if (show_colliders) {
-            // draw map colliders
-            for (auto& rect : colliders)
-                target.draw(getColliderShape(rect));
-        }
-
-        // draw player
-        target.draw(player);
-        if (show_colliders) {
-            // draw player collider
-            target.draw(getColliderShape(getPlayerCollider(player)));
-        }
-
-        // draw map top layer
-        target.draw(tilemap.getLayer("Trees_top"));
-    }
-};
+#include "../include/LDtkLoader/Project.hpp"
+#include "../raylib/include/raylib.h"
 
 int main() {
-    ldtk::Project project;
-    std::string ldtk_filename = "assets/maps/world1.ldtk";
+    // declare a LDtk World
+    ldtk::Project ldtk_project;
+
+    // load the LDtk World from file
     try {
-        project.loadFromFile(ldtk_filename);
-        std::cout << "LDtk World \"" << project.getFilePath() << "\" was loaded successfully." << std::endl;
+        ldtk_project.loadFromFile("assets/level.ldtk");
     }
     catch (std::exception& ex) {
         std::cerr << ex.what() << std::endl;
         return 1;
     }
 
-    // initialize the game from the LDtk project data
-    Game game;
-    game.init(project);
+    // get the world
+    const auto& world = ldtk_project.getWorld();
 
-    // create the window
-    sf::RenderWindow window;
-    window.create(sf::VideoMode(800, 500), "LDtkLoader - SFML");
-    window.setFramerateLimit(60);
+    // get the level and the layer we want to render
+    const auto& level = world.getLevel("Level");
+    const auto& layer = level.getLayer("Ground");
+    // get all the tiles in the Ground layer
+    const auto& tiles_vector = layer.allTiles();
 
-    // start game loop
-    while(window.isOpen()) {
+    // Init Raylib and create a window.
+    InitWindow(level.size.x * 4, level.size.y * 4, "LDtkLoader - Raylib");
+    SetTargetFPS(30);
 
-        // EVENTS
-        sf::Event event{};
-        while(window.pollEvent(event)) {
-            if (event.type == sf::Event::Closed) {
-                window.close();
-            }
-            if (event.type == sf::Event::KeyReleased) {
-                if (event.key.code == sf::Keyboard::F1)
-                    game.show_colliders = !game.show_colliders;
-                else if (event.key.code == sf::Keyboard::F5) {
-                    // reload the LDtk project and reinitialize the game
-                    project.loadFromFile(ldtk_filename);
-                    game.init(project, true);
-                    std::cout << "Reloaded project " << project.getFilePath() << std::endl;
-                }
-                else if (event.key.code == sf::Keyboard::Escape) {
-                    window.close();
-                }
-            }
-        }
+    // Load the texture and the renderer.
+    Texture2D texture = LoadTexture(("assets/" + layer.getTileset().path).c_str());
+    RenderTexture2D renderer = LoadRenderTexture(level.size.x, level.size.y);
 
-        // UPDATE
-        game.update();
-
-        // RENDER
-        window.clear();
-        game.render(window);
-        window.display();
-
+    // Draw all the tiles.
+    BeginTextureMode(renderer);
+    ClearBackground(BLACK);
+    for (const auto &tile : tiles_vector) {
+        const auto& position = tile.getPosition();
+        const auto& texture_rect = tile.getTextureRect();
+        Vector2 dest = {
+            static_cast<float>(position.x),
+            static_cast<float>(position.y),
+        };
+        Rectangle src = {
+            static_cast<float>(texture_rect.x),
+            static_cast<float>(texture_rect.y),
+            static_cast<float>(texture_rect.width) * (tile.flipX ? -1.0f : 1.0f),
+            static_cast<float>(texture_rect.height) * (tile.flipY ? -1.0f : 1.0f)
+        };
+        DrawTextureRec(texture, src, dest, WHITE);
     }
-    return 0;
+    EndTextureMode();
+
+    while (!WindowShouldClose()) {
+        // Scale up the Renderer times 4.
+        // NOTE: Render texture must be y-flipped due to default OpenGL coordinates (left-bottom)
+        BeginDrawing();
+        Rectangle src = {
+            0,
+            0,
+            static_cast<float>(renderer.texture.width),
+            -static_cast<float>(renderer.texture.height)
+        };
+        Rectangle dest = {
+            0,
+            0,
+            static_cast<float>(renderer.texture.width) * 4,
+            static_cast<float>(renderer.texture.height) * 4
+        };
+        DrawTexturePro(renderer.texture, src, dest, {0}, .0f, WHITE);
+        EndDrawing();
+    }
+
+    // Unload everything before leaving.
+    UnloadRenderTexture(renderer);
+    UnloadTexture(texture);
+    CloseWindow();
+    return (0);
 }
