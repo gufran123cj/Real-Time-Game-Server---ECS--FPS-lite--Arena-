@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <map>
+#include <string>
 
 #include <SFML/Graphics.hpp>
 #include <LDtkLoader/Level.hpp>

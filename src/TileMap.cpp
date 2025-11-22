@@ -1,6 +1,7 @@
 // Created by Modar Nasser on 13/06/2021.
 
 #include "TileMap.hpp"
+#include <stdexcept>
 
 auto TileMap::Textures::instance() -> Textures& {
     static Textures instance;
@@ -17,7 +18,7 @@ auto TileMap::Textures::get(const std::string& name) -> sf::Texture& {
 TileMap::Layer::Layer(const ldtk::Layer& layer, sf::RenderTexture& render_texture) : m_render_texture(render_texture) {
     m_tileset_texture = &Textures::get(layer.getTileset().path);
     m_vertex_array.resize(layer.allTiles().size()*4);
-    m_vertex_array.setPrimitiveType(sf::PrimitiveType::Quads);
+    m_vertex_array.setPrimitiveType(sf::Quads);
     int i = 0;
     for (const auto& tile : layer.allTiles()) {
         for (int j = 0; j < 4; ++j) {
@@ -42,7 +43,9 @@ void TileMap::Layer::draw(sf::RenderTarget& target, sf::RenderStates states) con
 std::string TileMap::path;
 
 void TileMap::load(const ldtk::Level& level) {
-    m_render_texture.create(level.size.x, level.size.y);
+    if (!m_render_texture.create(level.size.x, level.size.y)) {
+        throw std::runtime_error("Failed to create render texture");
+    }
     m_layers.clear();
     for (const auto& layer : level.allLayers()) {
         if (layer.getType() == ldtk::LayerType::AutoLayer) {

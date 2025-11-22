@@ -979,5 +979,70 @@ void GameServer::sendMatchFound(PlayerID playerID, RoomID roomID) {
     std::cout << "[Matchmaking] MATCH_FOUND sent to Player " << playerID << " (Room " << roomID << ")" << std::endl;
 }
 
+void GameServer::createMapObjects(Room* room) {
+    if (!room) return;
+    
+    // Harita sınırları: 150x150 (-75 to +75)
+    const float MAP_MIN = -75.0f;
+    const float MAP_MAX = 75.0f;
+    const float WALL_HEIGHT = 2.0f;
+    const float WALL_THICKNESS = 1.0f;
+    
+    // Create boundary walls (4 walls around the map)
+    // North wall
+    EntityID northWall = room->world.createEntity();
+    auto northPos = std::make_unique<components::Position>(0.0f, MAP_MIN, WALL_HEIGHT / 2.0f);
+    auto northCollision = components::CollisionComponent::fromCenterSize(
+        physics::Vec3(0.0f, MAP_MIN, WALL_HEIGHT / 2.0f),
+        physics::Vec3((MAP_MAX - MAP_MIN) * 2.0f, WALL_THICKNESS, WALL_HEIGHT),
+        true, // static
+        false // not a trigger
+    );
+    room->world.addComponent<components::Position>(northWall, std::move(northPos));
+    room->world.addComponent<components::CollisionComponent>(northWall, 
+        std::make_unique<components::CollisionComponent>(northCollision));
+    
+    // South wall
+    EntityID southWall = room->world.createEntity();
+    auto southPos = std::make_unique<components::Position>(0.0f, MAP_MAX, WALL_HEIGHT / 2.0f);
+    auto southCollision = components::CollisionComponent::fromCenterSize(
+        physics::Vec3(0.0f, MAP_MAX, WALL_HEIGHT / 2.0f),
+        physics::Vec3((MAP_MAX - MAP_MIN) * 2.0f, WALL_THICKNESS, WALL_HEIGHT),
+        true, // static
+        false // not a trigger
+    );
+    room->world.addComponent<components::Position>(southWall, std::move(southPos));
+    room->world.addComponent<components::CollisionComponent>(southWall, 
+        std::make_unique<components::CollisionComponent>(southCollision));
+    
+    // West wall
+    EntityID westWall = room->world.createEntity();
+    auto westPos = std::make_unique<components::Position>(MAP_MIN, 0.0f, WALL_HEIGHT / 2.0f);
+    auto westCollision = components::CollisionComponent::fromCenterSize(
+        physics::Vec3(MAP_MIN, 0.0f, WALL_HEIGHT / 2.0f),
+        physics::Vec3(WALL_THICKNESS, (MAP_MAX - MAP_MIN) * 2.0f, WALL_HEIGHT),
+        true, // static
+        false // not a trigger
+    );
+    room->world.addComponent<components::Position>(westWall, std::move(westPos));
+    room->world.addComponent<components::CollisionComponent>(westWall, 
+        std::make_unique<components::CollisionComponent>(westCollision));
+    
+    // East wall
+    EntityID eastWall = room->world.createEntity();
+    auto eastPos = std::make_unique<components::Position>(MAP_MAX, 0.0f, WALL_HEIGHT / 2.0f);
+    auto eastCollision = components::CollisionComponent::fromCenterSize(
+        physics::Vec3(MAP_MAX, 0.0f, WALL_HEIGHT / 2.0f),
+        physics::Vec3(WALL_THICKNESS, (MAP_MAX - MAP_MIN) * 2.0f, WALL_HEIGHT),
+        true, // static
+        false // not a trigger
+    );
+    room->world.addComponent<components::Position>(eastWall, std::move(eastPos));
+    room->world.addComponent<components::CollisionComponent>(eastWall, 
+        std::make_unique<components::CollisionComponent>(eastCollision));
+    
+    std::cout << "[Map] Created 4 boundary walls for room " << room->id << std::endl;
+}
+
 } // namespace game
 

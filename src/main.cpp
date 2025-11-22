@@ -1,80 +1,81 @@
+#include "Server.hpp"
 #include <iostream>
-#include "../include/LDtkLoader/Project.hpp"
-#include "../raylib/include/raylib.h"
+#include <string>
+#include <csignal>
+#include <exception>
 
-int main() {
-    // declare a LDtk World
-    ldtk::Project ldtk_project;
-
-    // load the LDtk World from file
-    try {
-        ldtk_project.loadFromFile("assets/level.ldtk");
+namespace {
+    game::GameServer* g_server = nullptr;
+    
+    void signalHandler(int signal) {
+        if (g_server) {
+            std::cout << "\n[Shutdown] Signal received (" << signal << "), shutting down server..." << std::endl;
+            g_server->shutdown();
+        }
+        exit(0);
     }
-    catch (std::exception& ex) {
-        std::cerr << ex.what() << std::endl;
+}
+
+int main(int argc, char* argv[]) {
+    // Parse command line arguments
+    std::string bindIP = "0.0.0.0";
+    uint16_t port = 7777;
+    int tickRate = game::DEFAULT_TICK_RATE;
+    
+    if (argc >= 2) {
+        try {
+            port = static_cast<uint16_t>(std::stoi(argv[1]));
+        } catch (const std::exception& e) {
+            std::cerr << "Invalid port number: " << argv[1] << std::endl;
+            return 1;
+        }
+    }
+    
+    if (argc >= 3) {
+        try {
+            tickRate = std::stoi(argv[2]);
+            if (tickRate <= 0 || tickRate > 240) {
+                std::cerr << "Invalid tick rate: " << tickRate << " (must be between 1 and 240)" << std::endl;
+                return 1;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Invalid tick rate: " << argv[2] << std::endl;
+            return 1;
+        }
+    }
+    
+    // Print header
+    std::cout << "=== Game Server (FPS-lite / Arena) ===" << std::endl;
+    std::cout << "C++20 | ECS | Authoritative Server" << std::endl;
+    std::cout << "=====================================" << std::endl;
+    
+    try {
+        // Create and initialize server
+        game::GameServer server(bindIP, port, tickRate);
+        g_server = &server;
+        
+        // Setup signal handlers for graceful shutdown
+        std::signal(SIGINT, signalHandler);
+        std::signal(SIGTERM, signalHandler);
+        
+        // Initialize server
+        if (!server.initialize()) {
+            std::cerr << "[ERROR] Failed to initialize server!" << std::endl;
+            return 1;
+        }
+        
+        std::cout << "Server running. Press Ctrl+C to stop." << std::endl;
+        
+        // Run server (blocks until shutdown)
+        server.run();
+        
+    } catch (const std::exception& e) {
+        std::cerr << "[FATAL ERROR] Exception caught: " << e.what() << std::endl;
+        return 1;
+    } catch (...) {
+        std::cerr << "[FATAL ERROR] Unknown exception caught!" << std::endl;
         return 1;
     }
-
-    // get the world
-    const auto& world = ldtk_project.getWorld();
-
-    // get the level and the layer we want to render
-    const auto& level = world.getLevel("Level");
-    const auto& layer = level.getLayer("Ground");
-    // get all the tiles in the Ground layer
-    const auto& tiles_vector = layer.allTiles();
-
-    // Init Raylib and create a window.
-    InitWindow(level.size.x * 4, level.size.y * 4, "LDtkLoader - Raylib");
-    SetTargetFPS(30);
-
-    // Load the texture and the renderer.
-    Texture2D texture = LoadTexture(("assets/" + layer.getTileset().path).c_str());
-    RenderTexture2D renderer = LoadRenderTexture(level.size.x, level.size.y);
-
-    // Draw all the tiles.
-    BeginTextureMode(renderer);
-    ClearBackground(BLACK);
-    for (const auto &tile : tiles_vector) {
-        const auto& position = tile.getPosition();
-        const auto& texture_rect = tile.getTextureRect();
-        Vector2 dest = {
-            static_cast<float>(position.x),
-            static_cast<float>(position.y),
-        };
-        Rectangle src = {
-            static_cast<float>(texture_rect.x),
-            static_cast<float>(texture_rect.y),
-            static_cast<float>(texture_rect.width) * (tile.flipX ? -1.0f : 1.0f),
-            static_cast<float>(texture_rect.height) * (tile.flipY ? -1.0f : 1.0f)
-        };
-        DrawTextureRec(texture, src, dest, WHITE);
-    }
-    EndTextureMode();
-
-    while (!WindowShouldClose()) {
-        // Scale up the Renderer times 4.
-        // NOTE: Render texture must be y-flipped due to default OpenGL coordinates (left-bottom)
-        BeginDrawing();
-        Rectangle src = {
-            0,
-            0,
-            static_cast<float>(renderer.texture.width),
-            -static_cast<float>(renderer.texture.height)
-        };
-        Rectangle dest = {
-            0,
-            0,
-            static_cast<float>(renderer.texture.width) * 4,
-            static_cast<float>(renderer.texture.height) * 4
-        };
-        DrawTexturePro(renderer.texture, src, dest, {0}, .0f, WHITE);
-        EndDrawing();
-    }
-
-    // Unload everything before leaving.
-    UnloadRenderTexture(renderer);
-    UnloadTexture(texture);
-    CloseWindow();
-    return (0);
+    
+    return 0;
 }

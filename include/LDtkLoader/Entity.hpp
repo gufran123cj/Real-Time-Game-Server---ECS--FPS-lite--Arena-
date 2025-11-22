@@ -2,33 +2,28 @@
 
 #pragma once
 
-#include <iostream>
-#include <memory>
 #include <string>
+#include <memory>
+#include <iostream>
 #include <unordered_map>
-
-#include "containers/FieldsContainer.hpp"
-#include "defs/EntityDef.hpp"
-#include "defs/FieldDef.hpp"
-#include "thirdparty/json_fwd.hpp"
-#include "DataTypes.hpp"
-#include "Enum.hpp"
-#include "Utils.hpp"
+#include "LDtkLoader/thirdparty/json_fwd.hpp"
+#include "LDtkLoader/containers/FieldsContainer.hpp"
+#include "LDtkLoader/defs/EntityDef.hpp"
+#include "LDtkLoader/defs/FieldDef.hpp"
+#include "LDtkLoader/DataTypes.hpp"
+#include "LDtkLoader/Enum.hpp"
+#include "LDtkLoader/Layer.hpp"
+#include "LDtkLoader/Utils.hpp"
 
 namespace ldtk {
 
     class World;
 
-    class Layer;
-
-    class Entity : public FieldsContainer
-    {
+    class Entity : public FieldsContainer {
     public:
-        ~Entity() = default;
         Entity(const Entity&) = delete;
-        Entity(Entity&&) noexcept = default;
+        Entity(Entity&&) = default;
         auto operator=(const Entity&) -> Entity& = delete;
-        auto operator=(Entity&&) -> Entity& = delete;
 
         const Layer* const layer;
         const IID iid;
@@ -51,7 +46,7 @@ namespace ldtk {
         auto getNineSliceBorders() const -> const NineSliceBorders&;
 
         auto hasTag(const std::string& tag) const -> bool;
-        auto allTags() const -> const std::vector<std::string>&;
+        auto getTags() const -> const std::vector<std::string>&;
 
         auto allFields() const -> const std::vector<FieldDef>&;
 
@@ -69,4 +64,4 @@ namespace ldtk {
         const IntRect m_texture_rect;
     };
 
-} // namespace ldtk
+}

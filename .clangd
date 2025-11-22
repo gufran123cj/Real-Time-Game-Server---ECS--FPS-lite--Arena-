@@ -1,0 +1,16 @@
+CompileFlags:
+  Add:
+    - '-ID:/Real-Time Game Server ECS (FPS-lite Arena)/third_party/SFML-2.6.0/include'
+    - '-ID:/Real-Time Game Server ECS (FPS-lite Arena)/include'
+    - '-ID:/Real-Time Game Server ECS (FPS-lite Arena)/ecs'
+    - '-ID:/Real-Time Game Server ECS (FPS-lite Arena)/net'
+    - '-ID:/Real-Time Game Server ECS (FPS-lite Arena)/physics'
+    - '-ID:/Real-Time Game Server ECS (FPS-lite Arena)/matchmaker'
+    - '-ID:/Real-Time Game Server ECS (FPS-lite Arena)/components'
+    - '-ID:/Real-Time Game Server ECS (FPS-lite Arena)/systems'
+    - '-ID:/Real-Time Game Server ECS (FPS-lite Arena)/build/_deps/ldtkloader-src/include'
+    - '-ID:/Real-Time Game Server ECS (FPS-lite Arena)/build/_deps/ldtkloader-build/include'
+
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: None

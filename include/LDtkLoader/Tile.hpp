@@ -4,21 +4,19 @@
 
 #include <array>
 
-#include "thirdparty/json_fwd.hpp"
-
-#include "DataTypes.hpp"
+#include "LDtkLoader/thirdparty/json_fwd.hpp"
+#include "LDtkLoader/DataTypes.hpp"
 
 namespace ldtk {
 
     class Layer;
 
-    class Tile
-    {
+    class Tile {
     public:
         const Layer* const layer;
 
         const int coordId = 0;
-        const int tileId = 0;
+        const int tileId  = 0;
 
         const bool flipX = false;
         const bool flipY = false;
@@ -35,13 +33,10 @@ namespace ldtk {
 
         static const Tile None;
 
-        Tile(const Layer* l, IntPoint pos, int coord_id, int tile_id, int flips, float a);
-
-    private:
-        IntPoint m_position;
+        Tile(const Layer* l, IntPoint pos, int tile_id, int flips, float a);
     };
 
     auto operator==(const Tile& l, const Tile& r) -> bool;
     auto operator!=(const Tile& l, const Tile& r) -> bool;
 
-} // namespace ldtk
+}

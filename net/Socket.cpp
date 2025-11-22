@@ -19,7 +19,12 @@ UDPSocket::UDPSocket() : bound(false) {
 #ifdef _WIN32
     socketHandle = nullptr;
     WSADATA wsaData;
-    WSAStartup(MAKEWORD(2, 2), &wsaData);
+    int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (result != 0) {
+        // WSAStartup failed - socket operations will fail
+        socketHandle = reinterpret_cast<void*>(INVALID_SOCKET);
+        return;
+    }
     socketHandle = reinterpret_cast<void*>(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP));
 #else
     socketHandle = -1;
