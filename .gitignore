@@ -1,1 +1,14 @@
-/.cursor
+.idea
+.vs
+.vscode
+
+_build
+_build-*
+
+build
+build-*
+
+*.exe
+*.ilk
+*.pdb
+*.manifest
